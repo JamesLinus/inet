@@ -638,7 +638,7 @@ if __name__ == "__main__":
             print("ERROR: build job failed " + buildJob.result)
             exit(1)
     
-    print("build finished: " + buildJob.result)
+    print("build finished: " + str(buildJob.result))
 
     rng = random.SystemRandom()
     cases = list(testcases)
