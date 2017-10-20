@@ -15,13 +15,8 @@
 // along with this program; if not, see <http://www.gnu.org/licenses/>.
 //
 
-cplusplus {{
-#include "inet/common/packet/chunk/FieldsChunk.h"
-}}
-
-namespace inet;
-
-class FieldsChunk extends cObject;
+import inet.common.INETDefs;
+import inet.common.packet.chunk.Chunk;
 
 namespace inet::physicallayer;
 
