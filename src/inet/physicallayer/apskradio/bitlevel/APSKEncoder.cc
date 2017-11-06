@@ -15,6 +15,7 @@
 // along with this program; if not, see <http://www.gnu.org/licenses/>.
 //
 
+#include <algorithm>
 #include "inet/common/packet/chunk/BitsChunk.h"
 #include "inet/physicallayer/apskradio/bitlevel/APSKEncoder.h"
 #include "inet/physicallayer/apskradio/packetlevel/APSKPhyHeader_m.h"
@@ -67,6 +68,56 @@ std::ostream& APSKEncoder::printToStream(std::ostream& stream, int level) const
 
 const ITransmissionBitModel *APSKEncoder::encode(const ITransmissionPacketModel *packetModel) const
 {
+    int bitLength = 1000;
+    int repeatCount = 10000;
+//    for (auto grossBER : {0.1, 0.2, 0.4, 0.8}) {
+//    for (auto grossBER : {0.01, 0.02, 0.04, 0.1}) {
+    for (auto grossBER : {0.001, 0.002, 0.004, 0.01, 0.02, 0.04, 0.1}) {
+        int bitLevelErrorCount = 0;
+        for (int r = 0; r < repeatCount; r++) {
+            BitVector *data = new BitVector();
+            for (int i = 0; i < bitLength; i++)
+                data->appendBit(uniform(0, 1) < 0.5);
+            auto encodedData = fecEncoder->encode(*data);
+            int bitErrorCount = encodedData.getSize() * grossBER;
+            std::vector<int> bitErrorIndices;
+            for (int i = 0; i < bitErrorCount; i++) {
+                while (true) {
+                    int index = intuniform(0, encodedData.getSize() - 1);
+                    if (std::find(bitErrorIndices.begin(), bitErrorIndices.end(), index) == bitErrorIndices.end()) {
+                        bitErrorIndices.push_back(index);
+                        break;
+                    }
+                }
+            }
+            for (auto bitErrorIndex : bitErrorIndices)
+                encodedData.toggleBit(bitErrorIndex);
+//            int bitErrorCount = 0;
+//            for (int i = 0; i < (int)encodedData.getSize(); i++) {
+//                if (uniform(0, 1) < grossBER) {
+//                    bitErrorCount++;
+//                    encodedData.toggleBit(i);
+//                }
+//            }
+//            double measuredBER = (double)bitErrorCount / encodedData.getSize();
+//            std::cout << "Parameter gross BER: " << grossBER << ", measured gross BER: " << measuredBER << std::endl;
+            auto fecDecoder = check_and_cast<IFECCoder *>(getModuleByPath("^.^.receiver.decoder.fecDecoder"));
+            auto decodedDataAndSuccess = fecDecoder->decode(encodedData);
+            auto decodedData = decodedDataAndSuccess.first;
+            auto hasBitError = !decodedDataAndSuccess.second;
+            for (int i = 0; i < bitLength; i++)
+                if (data->getBit(i) != decodedData.getBit(i))
+                    hasBitError = true;
+            if (hasBitError)
+                bitLevelErrorCount++;
+        }
+        double bitLevelPER = (double)bitLevelErrorCount / repeatCount;
+        double netBER = fecEncoder->getForwardErrorCorrection()->computeNetBitErrorRate(grossBER);
+        double packetLevelPER = 1 - pow(1 - netBER, bitLength);
+        std::cout << "Bit length: " << bitLength << ", gross BER: " << grossBER << ", net BER: " << netBER << ", packet level PER: " << packetLevelPER << ", bit level PER: " << bitLevelPER << std::endl;
+    }
+
+
     auto packet = packetModel->getPacket();
     const auto& apskPhyHeader = packet->peekHeader<APSKPhyHeader>();
     auto length = packet->getTotalLength();
